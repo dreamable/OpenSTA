@@ -497,6 +497,8 @@ namespace sta
       // where L is the incidence matrix * diag(1/sqrt(ri)), the indidence matrix is upper matrix (by placing resistance ri before node i. )
       // Ly=b, L'x = y; iv is y and y is x here.
       // y = R C u0  (W)
+      // why y[0]=0? should be Rd*Ctotal. As Rd is unknown, should be zero. 
+      // First element of RCUi is always zero.wq  
       for (j = 0; j < n; j++){
         iv[j] = 0.0;
       }

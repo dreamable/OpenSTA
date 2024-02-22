@@ -430,6 +430,18 @@ namespace sta
   // d: eigenvalues  n x 1
   // v: eigenvectors n x n
   // what algorithm?
+  //https://github.com/mpmath/mpmath/blob/master/mpmath/matrices/eigen_symmetric.py 
+    // This routine is a python translation (in slightly modified form) of the
+    // fortran routine imtql2.f in the software library EISPACK (see netlib.org)
+    // which itself is based on the algol procudure imtql2 desribed in:
+    //  - num. math. 12, p. 377-383(1968) by matrin and wilkinson
+    //  - modified in num. math. 15, p. 450(1970) by dubrulle
+    //  - handbook for auto. comp., vol. II-linear algebra, p. 241-248 (1971)
+    // See also the routine gaussq.f in netlog.org or acm algorithm 726.
+    // https://www.netlib.org/seispack/imtql2.f
+    // QL https://link.springer.com/chapter/10.1007/978-3-642-86940-2_15
+    // QL&QR https://link.springer.com/chapter/10.1007/978-3-662-39778-7_14
+    // QR https://link.springer.com/article/10.1007/BF02308862 
   static bool tridiagEV(int n, double *din, double *ein, double *d, double **v){
     int j, k;
     // v = E
@@ -765,13 +777,13 @@ namespace sta
     }
     double p0 = p[h0];
     double ps, vs, ta, va;
-    vs = 0.0;
+    vs = 0.0; // voltage at (t=s (slew))
     // F = ki * exp(-ps)
     for (h = 0; h < order; h++){
-      ps = p[h] * s; // why p * s?
+      ps = p[h] * s; // pi*delta t
       vs += rr[h] * (1 - exp(-ps)) / ps;
     }
-    if (vs < v1){
+    if (vs < v1){ // before slew (delt t)
       // s dominates
       ta = 0.5 * (1 + v1) * s;
       pr_get_v(ta, s, order, p, rr, &va);
@@ -788,7 +800,7 @@ namespace sta
         }
         tmin = ta;
         vmin = va;
-      }else{
+      }else{ //after delta t
         tmin = ta;
         vmin = va;
         ta = s;
@@ -1033,7 +1045,7 @@ namespace sta
     double y, ept, eps;
     if (t <= s){
       ept = (pt > 40.0) ? 0.0 : exp(-pt);
-      y = ept - 1.0 + pt;
+      y = ept - 1.0 + pt; // matched with our y(t), vin=1?
     }else{
       pt = pt - ps;
       ept = (pt > 40.0) ? 0.0 : exp(-pt);
@@ -1069,6 +1081,10 @@ namespace sta
   // f(x) = x + e^-x -1 
   // df(x) = 1 - e^-x
   // Newton method to find the root.  
+  // This is the RC output waveform. 
+  //   vo(t) = t - (1-e^-pt)/p = (pt + e^-pt -1)/p, where p = 1/r*c
+  //   let x = pt, we have the function f(x) = x+e^-x+1
+  // This function solves f(x) = y
   static double ra_hinv(double y){
     double x;
     if (y < 1.0){
@@ -1193,6 +1209,7 @@ namespace sta
     ra_solve_for_pt(p * s, vhi, &pthi, &dhi);
     f = (ptlo - pthi) / p - tlohi;
     df = dlo - dhi;
+
     s = s - f / df;
     if (abs(f) < .001e-12)
       return; // .001ps
@@ -1352,9 +1369,9 @@ namespace sta
     // Calculate pole/residues for single-drive Arnoldi model
     mod->calculate_poles_res(D, r); // Rdriv
     double *p = D->poles;
-    double *rr = delay_work_get_residues(D, 0); // first order residues
+    double *rr = delay_work_get_residues(D, 0); // first node  residues
     double thi, tlo, t50_srmod;
-    // first order v(t)
+    // first node  v(t)
     pr_solve1(s, mod->order, p, rr, 0.5, &t50_srmod); // find t50_srmod, such that pole-residue at t is 0.5
 
     int ceff_it, j;
@@ -1364,7 +1381,7 @@ namespace sta
     if (!bad){
       for (ceff_it = 0; ceff_it < 3; ceff_it++){
 
-        // calculate ceff
+        // calculate ceff based on Q = \int i(t) dt = C*V
         ceff_time = s;
         ceff = pr_ceff(s, r, mod->order, p, rr, ceff_time);
 
@@ -1379,10 +1396,10 @@ namespace sta
 
 
     tab->table->gateDelay(tab->cell, tab->pvt, tab->in_slew, ceff, tab->relcap, pocv_enabled_, df, sf);
-    t50_sy = delayAsFloat(df);
-    t50_sr = ra_solve_for_t(1.0 / (r * ceff), s, 0.5);
+    t50_sy = delayAsFloat(df); // NLDM driver pin delay
+    t50_sr = ra_solve_for_t(1.0 / (r * ceff), s, 0.5); // Model waveform driver pin delay, adjust Rd to match them?
     for (j = 0; j < mod->n; j++){
-      // j-th order v(t)
+      // j-th node v(t)
       rr = delay_work_get_residues(D, j);
       pr_solve3(s, mod->order, p, rr, vhi, &thi, 0.5, &t50_srmod, vlo, &tlo);
       delays[j] = t50_srmod + t50_sy - t50_sr;

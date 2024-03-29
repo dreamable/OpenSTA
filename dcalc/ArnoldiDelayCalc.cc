@@ -1278,6 +1278,15 @@ namespace sta
     tab->table->gateDelay(tab->cell, tab->pvt, tab->in_slew,c1, tab->relcap, pocv_enabled_,d1, s1);
     tlohi = slew_derate * delayAsFloat(s1);
     r = tlohi / (c_log * c1);
+    // NOTE: Here r is the value that RC slew(with dt=0) = NLDM slew. If dt is > 0, then RC slew is larger than NLDM slew.
+    // so r is upper bound such that we have a solution of dt to match slew(r,Ctot) with NLDM slew. 
+    // If the estimated delay rdelay is greater than r (r_max), then there will be no solution for dt. 
+    // Therefore, we flag it as bad if rdelay >= r. 
+    // The implementation here is awkward: 
+    //    if rdelay < r, then set r = rdelay, bad = (r<rdelay) = false
+    //    if rdelay = r, then bad = (r<rdelay) = true; 
+    //    if rdelay > r, then r is not modified, bad=(r<rdelay) = true. 
+    // If bad, then use Rd = r_max, ceff = ctot, dt=0|dt_min. 
     if (rdelay > 0.0 && r > rdelay)
       r = rdelay;
     return r;

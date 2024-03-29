@@ -1294,10 +1294,14 @@ namespace sta
     Slew s1;
     tab->table->gateDelay(tab->cell, tab->pvt, tab->in_slew,c, tab->relcap, pocv_enabled_, d1, s1);
     tlohi = slew_derate * delayAsFloat(s1);
+    // TODO: Why this is the lower bound of dt?
     smin = r * c * c_smin; // c_smin = ra_hinv((1-vhi)/vhi-log(vhi)) + log(vhi);
-    if (c_log * r * c >= tlohi){
+    //  output slew increase monotonically with dt. when dt is zero, the slew after RC is: log(vhi/vlo)*r*c, which is the lower bound.
+    // So if it's still larger than NLDM slew, then there is no solution. Use the minimum value of dt: smin
+    if (c_log * r * c >= tlohi){ 
       s = smin;
     }else{
+      // TODO: Why this is a good start point?
       s = smin + 0.3 * tlohi;
       ra_solve_for_s(D, 1.0 / (r * c), tlohi, s);
     }
@@ -1350,7 +1354,7 @@ namespace sta
     r = ra_get_r(D, tab, rdelay, ctot);
     if (!(r > 0.0 && r < 100e+3)) // 100khom
       rdelay = 1e+3;              // 1kohm
-    bool bad = (r < rdelay);
+    bool bad = (r < rdelay);      // TODO: why this is bad?
 
     // slew
     s = ra_get_s(D, tab, r, ctot);
@@ -1377,7 +1381,7 @@ namespace sta
     int ceff_it, j;
     double ceff_time = 0.0;
 
-    // update  Ceff and slew
+    // update  Ceff and slew(s node)
     if (!bad){
       for (ceff_it = 0; ceff_it < 3; ceff_it++){
 
